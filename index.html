@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feffavolante</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500&display=swap" rel="stylesheet">
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      font-family: 'Poppins', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #feffa {
+      position: absolute;
+      width: 150px;
+      touch-action: none;
+      cursor: grab;
+      /* idle float */
+      animation: float 3s ease-in-out infinite;
+      filter: drop-shadow(0 10px 12px rgba(0, 0, 0, .35));
+      will-change: transform, left, top;
+    }
+
+    #feffa.dragging { cursor: grabbing; animation: none; }
+
+    #feffa img {
+      display: block;
+      width: 100%;
+      pointer-events: none;
+      -webkit-user-drag: none;
+      transform-origin: 50% 90%;
+    }
+
+    /* talking: bouncy squash & stretch plus a little wobble */
+    #feffa.talking img { animation: talk .28s ease-in-out infinite; }
+    #feffa.talking { animation: none; }
+
+    /* surprised "ooo" */
+    #feffa.shocked img { animation: shock .18s linear infinite; }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-8px); }
+    }
+    @keyframes talk {
+      0%   { transform: scale(1, 1) rotate(-2deg); }
+      25%  { transform: scale(1.06, .94) rotate(0deg); }
+      50%  { transform: scale(.96, 1.06) rotate(2deg); }
+      75%  { transform: scale(1.06, .94) rotate(0deg); }
+      100% { transform: scale(1, 1) rotate(-2deg); }
+    }
+    @keyframes shock {
+      0%, 100% { transform: translateX(-3px) scale(1.08); }
+      50%      { transform: translateX(3px) scale(1.08); }
+    }
+
+    /* little sound waves while speaking */
+    .wave {
+      position: absolute;
+      top: 18%;
+      right: -14px;
+      width: 14px;
+      height: 14px;
+      border: 3px solid rgba(255, 255, 255, .85);
+      border-left-color: transparent;
+      border-bottom-color: transparent;
+      border-radius: 50%;
+      opacity: 0;
+      pointer-events: none;
+    }
+    #feffa.talking .wave { animation: wave 0.9s ease-out infinite; }
+    #feffa.talking .wave:nth-child(3) { animation-delay: .3s; }
+    #feffa.talking .wave:nth-child(4) { animation-delay: .6s; }
+    @keyframes wave {
+      0%   { opacity: .9; transform: scale(.6) rotate(45deg); }
+      100% { opacity: 0;  transform: scale(2.4) rotate(45deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="feffa" title="Feffavolante">
+    <img id="face" src="assets/feffanormale.png" alt="Feffa" draggable="false">
+    <span class="wave"></span><span class="wave"></span><span class="wave"></span>
+  </div>
+
+  <script>
+    const feffa = document.getElementById('feffa');
+    const face = document.getElementById('face');
+
+    const IDLE = 'assets/feffanormale.png';
+    const TALK = 'assets/feffaparla.png';
+    const RANDOM = ['assets/casuale1.ogg', 'assets/casuale2.ogg'];
+    const OOO = 'assets/ooo.ogg';
+
+    const CLICK_MOVE_LIMIT = 6;   // px: less than this = click, not drag
+    const FAST_SPEED = 2.2;       // px/ms: dragging faster than this = "too fast"
+    const FAST_HITS = 3;          // consecutive fast samples needed
+
+    // Preload
+    [IDLE, TALK].forEach(s => { const i = new Image(); i.src = s; });
+    const audios = {};
+    [...RANDOM, OOO].forEach(s => { const a = new Audio(s); a.preload = 'auto'; audios[s] = a; });
+
+    let current = null;
+    let lastRandom = -1;
+
+    function setTalking(on, shocked) {
+      feffa.classList.toggle('talking', on && !shocked);
+      feffa.classList.toggle('shocked', on && !!shocked);
+      face.src = on ? TALK : IDLE;
+    }
+
+    function play(src, shocked) {
+      if (current) { current.pause(); current.currentTime = 0; }
+      const a = audios[src];
+      a.currentTime = 0;
+      current = a;
+      setTalking(true, shocked);
+      const done = () => {
+        a.removeEventListener('ended', done);
+        a.removeEventListener('error', done);
+        if (current === a) { current = null; setTalking(false); }
+      };
+      a.addEventListener('ended', done);
+      a.addEventListener('error', done);
+      a.play().catch(done);
+    }
+
+    function playRandom() {
+      let i;
+      do { i = Math.floor(Math.random() * RANDOM.length); }
+      while (RANDOM.length > 1 && i === lastRandom);
+      lastRandom = i;
+      play(RANDOM[i], false);
+    }
+
+    // ---- position & dragging ----
+    function clamp(x, y) {
+      const w = feffa.offsetWidth, h = feffa.offsetHeight;
+      return [
+        Math.min(Math.max(0, x), Math.max(0, window.innerWidth - w)),
+        Math.min(Math.max(0, y), Math.max(0, window.innerHeight - h))
+      ];
+    }
+    function place(x, y) {
+      [x, y] = clamp(x, y);
+      feffa.style.left = x + 'px';
+      feffa.style.top = y + 'px';
+    }
+    function center() {
+      place((window.innerWidth - feffa.offsetWidth) / 2,
+            (window.innerHeight - feffa.offsetHeight) / 2);
+    }
+    face.addEventListener('load', center, { once: true });
+    window.addEventListener('load', center);
+    window.addEventListener('resize', () => place(feffa.offsetLeft, feffa.offsetTop));
+
+    let drag = null;
+    let lastOoo = 0;
+
+    feffa.addEventListener('pointerdown', e => {
+      feffa.setPointerCapture(e.pointerId);
+      feffa.classList.add('dragging');
+      drag = {
+        dx: e.clientX - feffa.offsetLeft,
+        dy: e.clientY - feffa.offsetTop,
+        sx: e.clientX, sy: e.clientY,
+        lx: e.clientX, ly: e.clientY, lt: performance.now(),
+        moved: 0, fast: 0
+      };
+    });
+
+    feffa.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const now = performance.now();
+      const dt = Math.max(1, now - drag.lt);
+      const dist = Math.hypot(e.clientX - drag.lx, e.clientY - drag.ly);
+      const speed = dist / dt;
+      drag.lx = e.clientX; drag.ly = e.clientY; drag.lt = now;
+      drag.moved = Math.max(drag.moved, Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy));
+
+      place(e.clientX - drag.dx, e.clientY - drag.dy);
+
+      // moving too fast -> "ooo"
+      if (dt >= 4) {
+        drag.fast = speed > FAST_SPEED ? drag.fast + 1 : 0;
+        if (drag.fast >= FAST_HITS && now - lastOoo > 2500 && !(current === audios[OOO])) {
+          lastOoo = now;
+          drag.fast = 0;
+          play(OOO, true);
+        }
+      }
+    });
+
+    function endDrag(e) {
+      if (!drag) return;
+      const wasClick = drag.moved < CLICK_MOVE_LIMIT;
+      drag = null;
+      feffa.classList.remove('dragging');
+      if (wasClick && e.type === 'pointerup') playRandom();
+    }
+    feffa.addEventListener('pointerup', endDrag);
+    feffa.addEventListener('pointercancel', endDrag);
+  </script>
+</body>
+</html>
